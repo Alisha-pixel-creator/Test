@@ -1,0 +1,133 @@
+import streamlit as st
+import requests
+
+# =========================
+# BASIC SETUP
+# =========================
+
+st.title("Recipe Finder")
+
+# =========================
+# SEARCH BY NAME
+# =========================
+
+st.header("Search by meal name")
+
+with st.form("form_name"):
+    recipe_name = st.text_input("Enter a recipe name", key="recipe")
+    submit_name = st.form_submit_button("Search by Name")
+
+if submit_name:
+    if recipe_name.strip() == "":
+        st.warning("Please enter a recipe name.")
+    else:
+        url = "https://www.themealdb.com/api/json/v1/1/search.php"
+        params = {"s": recipe_name}
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            meals = data.get("meals")
+
+            if meals:
+                for meal in meals:
+                    st.subheader(meal["strMeal"])
+                    st.image(meal["strMealThumb"], width=300)
+                    st.write("Category:", meal.get("strCategory", "Unknown"))
+                    st.write("Area:", meal.get("strArea", "Unknown"))
+
+                    with st.expander("Instructions"):
+                        st.write(meal.get("strInstructions", "No instructions available"))
+            else:
+                st.error("No recipe found.")
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {e}")
+
+# =========================
+# FILTER BY INGREDIENT
+# =========================
+
+st.header("Filter by ingredient")
+
+with st.form("form_ingredient"):
+    ingredient_name = st.text_input("Enter an ingredient", key="ingredient")
+    submit_ing = st.form_submit_button("Search by Ingredient")
+
+if submit_ing:
+    if ingredient_name.strip() == "":
+        st.warning("Please enter an ingredient.")
+    else:
+        url = "https://www.themealdb.com/api/json/v1/1/filter.php"
+        params = {"i": ingredient_name}
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            meals = data.get("meals")
+
+            if meals:
+                for meal in meals:
+                    st.subheader(meal["strMeal"])
+                    st.image(meal["strMealThumb"], width=250)
+                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))
+            else:
+                st.error("No recipes found for this ingredient.")
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {e}")
+
+# =========================
+# FILTER BY CATEGORY
+# =========================
+
+st.header("Filter by category")
+
+# Kategorien laden
+try:
+    response = requests.get("https://www.themealdb.com/api/json/v1/1/categories.php", timeout=10)
+    response.raise_for_status()
+
+    categories_data = response.json().get("categories", [])
+    category_list = [item["strCategory"] for item in categories_data]
+
+    st.caption(", ".join(category_list))
+
+except Exception:
+    st.caption("Could not load categories list.")
+
+with st.form("form_category"):
+    category_name = st.text_input(
+        "Enter a category (e.g. Seafood, Chicken, Vegetarian)",
+        key="category"
+    )
+    submit_cat = st.form_submit_button("Search by Category")
+
+if submit_cat:
+    if category_name.strip() == "":
+        st.warning("Please enter a category.")
+    else:
+        url = "https://www.themealdb.com/api/json/v1/1/filter.php"
+        params = {"c": category_name}
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            meals = data.get("meals")
+
+            if meals:
+                for meal in meals:
+                    st.subheader(meal["strMeal"])
+                    st.image(meal["strMealThumb"], width=250)
+                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))
+            else:
+                st.error("No recipes found for this category.")
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {e}")
