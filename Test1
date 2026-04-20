@@ -1,7 +1,9 @@
 import streamlit as st
 import requests
-import plotly.graph_objects as go
-import pandas as pd
+
+# =========================
+# BASIC SETUP
+# =========================
 
 st.title("Recipe Finder")
 
@@ -11,18 +13,22 @@ st.title("Recipe Finder")
 
 st.header("Search by meal name")
 
-recipe_name = st.text_input("Enter a recipe name")
+with st.form("form_name"):
+    recipe_name = st.text_input("Enter a recipe name", key="recipe")
+    submit_name = st.form_submit_button("Search by Name")
 
-if st.button("Search by Name"):
+if submit_name:
     if recipe_name.strip() == "":
         st.warning("Please enter a recipe name.")
     else:
         url = "https://www.themealdb.com/api/json/v1/1/search.php"
         params = {"s": recipe_name}
+
         try:
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
+
             meals = data.get("meals")
 
             if meals:
@@ -34,41 +40,6 @@ if st.button("Search by Name"):
 
                     with st.expander("Instructions"):
                         st.write(meal.get("strInstructions", "No instructions available"))
-
-                    with st.expander("📊 Ingredients Overview"):
-                        ingredients = []
-                        measures = []
-                        for i in range(1, 21):
-                            ing = meal.get(f"strIngredient{i}", "")
-                            meas = meal.get(f"strMeasure{i}", "")
-                            if ing and ing.strip():
-                                ingredients.append(ing.strip())
-                                measures.append(meas.strip() if meas else "–")
-
-                        if ingredients:
-                            df_ing = pd.DataFrame({"Ingredient": ingredients, "Measure": measures})
-                            st.dataframe(df_ing, use_container_width=True, hide_index=True)
-
-                            fig_ing = go.Figure(go.Bar(
-                                x=ingredients,
-                                y=[1] * len(ingredients),
-                                marker_color="#558B2F",
-                                hovertemplate="<b>%{x}</b><br>%{customdata}<extra></extra>",
-                                customdata=measures,
-                                showlegend=False,
-                            ))
-                            fig_ing.update_layout(
-                                title="Ingredients at a glance",
-                                xaxis=dict(tickangle=-40, tickfont=dict(size=11)),
-                                yaxis=dict(visible=False),
-                                height=320,
-                                margin=dict(t=50, b=120, l=10, r=10),
-                                paper_bgcolor="rgba(0,0,0,0)",
-                                plot_bgcolor="rgba(0,0,0,0)",
-                            )
-                            st.plotly_chart(fig_ing, use_container_width=True)
-                        else:
-                            st.info("No ingredient data available.")
             else:
                 st.error("No recipe found.")
 
@@ -81,57 +52,26 @@ if st.button("Search by Name"):
 
 st.header("Filter by ingredient")
 
-ingredient_name = st.text_input("Enter an ingredient")
+with st.form("form_ingredient"):
+    ingredient_name = st.text_input("Enter an ingredient", key="ingredient")
+    submit_ing = st.form_submit_button("Search by Ingredient")
 
-if st.button("Search by Ingredient"):
+if submit_ing:
     if ingredient_name.strip() == "":
         st.warning("Please enter an ingredient.")
     else:
         url = "https://www.themealdb.com/api/json/v1/1/filter.php"
         params = {"i": ingredient_name}
+
         try:
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
+
             meals = data.get("meals")
 
             if meals:
                 for meal in meals:
-                    meal["match_score"] = 95 if ingredient_name.lower() in meal["strMeal"].lower() else 55 + (int(meal.get("idMeal", 0)) % 35)
-
-                meals_sorted = sorted(meals, key=lambda m: m["match_score"], reverse=True)
-                top_meals = meals_sorted[:10]
-
-                titles = [m["strMeal"][:22] + "…" if len(m["strMeal"]) > 22 else m["strMeal"] for m in top_meals]
-                scores = [m["match_score"] for m in top_meals]
-                bar_colors = ["#2D4A22" if s >= 70 else ("#7CB342" if s >= 40 else "#AED581") for s in scores]
-
-                fig_score = go.Figure(go.Bar(
-                    x=titles,
-                    y=scores,
-                    marker_color=bar_colors,
-                    text=[f"{s}%" for s in scores],
-                    textposition="outside",
-                    hovertemplate="<b>%{x}</b><br>Match: %{y}%<extra></extra>",
-                ))
-                fig_score.add_hline(
-                    y=70, line_dash="dot", line_color="#C62828",
-                    annotation_text="Good match (70%)",
-                    annotation_position="top right",
-                    annotation_font_color="#C62828",
-                )
-                fig_score.update_layout(
-                    title=f"🤖 Match Score – Recipes with '{ingredient_name}'",
-                    yaxis=dict(range=[0, 115], title="Match Score (%)", gridcolor="#EEEEEE"),
-                    xaxis=dict(tickangle=-30, tickfont=dict(size=11)),
-                    margin=dict(t=70, b=90, l=50, r=20),
-                    height=380,
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                )
-                st.plotly_chart(fig_score, use_container_width=True)
-
-                for meal in top_meals:
                     st.subheader(meal["strMeal"])
                     st.image(meal["strMealThumb"], width=250)
                     st.write("Meal ID:", meal.get("idMeal", "Unknown"))
@@ -147,75 +87,41 @@ if st.button("Search by Ingredient"):
 
 st.header("Filter by category")
 
+# Kategorien laden
 try:
     response = requests.get("https://www.themealdb.com/api/json/v1/1/categories.php", timeout=10)
     response.raise_for_status()
+
     categories_data = response.json().get("categories", [])
     category_list = [item["strCategory"] for item in categories_data]
+
     st.caption(", ".join(category_list))
+
 except Exception:
     st.caption("Could not load categories list.")
-    categories_data = []
-    category_list = []
 
-category_name = st.text_input("Enter a category (e.g. Seafood, Chicken, Vegetarian)")
+with st.form("form_category"):
+    category_name = st.text_input(
+        "Enter a category (e.g. Seafood, Chicken, Vegetarian)",
+        key="category"
+    )
+    submit_cat = st.form_submit_button("Search by Category")
 
-if st.button("Search by Category"):
+if submit_cat:
     if category_name.strip() == "":
         st.warning("Please enter a category.")
     else:
         url = "https://www.themealdb.com/api/json/v1/1/filter.php"
         params = {"c": category_name}
+
         try:
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             data = response.json()
+
             meals = data.get("meals")
 
             if meals:
-                st.info(f"Found {len(meals)} recipes in '{category_name}'. Loading details for top 6…")
-
-                detailed_meals = []
-                for meal in meals[:6]:
-                    try:
-                        detail_resp = requests.get(
-                            "https://www.themealdb.com/api/json/v1/1/lookup.php",
-                            params={"i": meal["idMeal"]}, timeout=10
-                        )
-                        detail_data = detail_resp.json().get("meals", [])
-                        if detail_data:
-                            detailed_meals.append(detail_data[0])
-                    except Exception:
-                        pass
-
-                if detailed_meals:
-                    recipe_titles = []
-                    ingredient_counts = []
-                    for m in detailed_meals:
-                        count = sum(1 for i in range(1, 21) if m.get(f"strIngredient{i}", "").strip())
-                        short_title = m["strMeal"][:22] + "…" if len(m["strMeal"]) > 22 else m["strMeal"]
-                        recipe_titles.append(short_title)
-                        ingredient_counts.append(count)
-
-                    fig_cov = go.Figure(go.Bar(
-                        x=recipe_titles,
-                        y=ingredient_counts,
-                        marker_color="#2D4A22",
-                        text=ingredient_counts,
-                        textposition="outside",
-                        hovertemplate="<b>%{x}</b><br>Total ingredients: %{y}<extra></extra>",
-                    ))
-                    fig_cov.update_layout(
-                        title=f"🧺 Number of Ingredients per Recipe – {category_name}",
-                        yaxis=dict(title="Number of Ingredients", gridcolor="#EEEEEE"),
-                        xaxis=dict(tickangle=-30, tickfont=dict(size=11)),
-                        margin=dict(t=70, b=90, l=50, r=20),
-                        height=360,
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                    )
-                    st.plotly_chart(fig_cov, use_container_width=True)
-
                 for meal in meals:
                     st.subheader(meal["strMeal"])
                     st.image(meal["strMealThumb"], width=250)
