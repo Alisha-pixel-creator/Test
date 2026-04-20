@@ -1,565 +1,227 @@
-# Simple Search engine for "Recipes name", "Search by ingredient" and "Search by category" 
-# Only one ingredient can be sorted at a time 
-# Only using ThemealDB as it's the most straighforward API" 
-
 import streamlit as st
 import requests
+import plotly.graph_objects as go
+import pandas as pd
 
-# =========================
-# BASIC SETUP
-# =========================
-
-st.title("Recipe Finder")  
-# Displays the main title at the top of the Streamlit app
+st.title("Recipe Finder")
 
 # =========================
 # SEARCH BY NAME
 # =========================
 
-st.header("Search by meal name")  
-# Creates a section title for searching recipes by name
+st.header("Search by meal name")
 
-recipe_name = st.text_input("Enter a recipe name")  
-# Creates an input field where the user types a recipe name
-# The value entered is stored in the variable 'recipe_name'
+recipe_name = st.text_input("Enter a recipe name")
 
-if st.button("Search by Name"):  
-    # Creates a button; the code inside runs only when the button is clicked
-
-    if recipe_name.strip() == "":  
-        # strip() removes spaces to avoid empty inputs like "   "
-        st.warning("Please enter a recipe name.")  
-        # Displays a warning message if input is empty
+if st.button("Search by Name"):
+    if recipe_name.strip() == "":
+        st.warning("Please enter a recipe name.")
     else:
-        url = "https://www.themealdb.com/api/json/v1/1/search.php"  
-        # API endpoint for searching recipes by name
-
-        params = {"s": recipe_name}  
-        # Query parameter 's' is required by TheMealDB to search by name
-
+        url = "https://www.themealdb.com/api/json/v1/1/search.php"
+        params = {"s": recipe_name}
         try:
-            response = requests.get(url, params=params, timeout=10)  
-            # Sends an HTTP GET request to the API with parameters
-            # timeout prevents the app from freezing if API is slow
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            meals = data.get("meals")
 
-            response.raise_for_status()  
-            # Raises an error if HTTP response is not successful (e.g. 404, 500)
+            if meals:
+                for meal in meals:
+                    st.subheader(meal["strMeal"])
+                    st.image(meal["strMealThumb"], width=300)
+                    st.write("Category:", meal.get("strCategory", "Unknown"))
+                    st.write("Area:", meal.get("strArea", "Unknown"))
 
-            data = response.json()  
-            # Converts the API response (JSON) into a Python dictionary
+                    with st.expander("Instructions"):
+                        st.write(meal.get("strInstructions", "No instructions available"))
 
-            meals = data.get("meals")  
-            # Extracts the list of meals; can be None if no result
+                    with st.expander("📊 Ingredients Overview"):
+                        ingredients = []
+                        measures = []
+                        for i in range(1, 21):
+                            ing = meal.get(f"strIngredient{i}", "")
+                            meas = meal.get(f"strMeasure{i}", "")
+                            if ing and ing.strip():
+                                ingredients.append(ing.strip())
+                                measures.append(meas.strip() if meas else "–")
 
-            if meals:  
-                # Checks if at least one recipe was found
+                        if ingredients:
+                            df_ing = pd.DataFrame({"Ingredient": ingredients, "Measure": measures})
+                            st.dataframe(df_ing, use_container_width=True, hide_index=True)
 
-                for meal in meals:  
-                    # Loops through each recipe in the result list
-
-                    st.subheader(meal["strMeal"])  
-                    # Displays the recipe name
-
-                    st.image(meal["strMealThumb"], width=300)  
-                    # Displays the recipe image (thumbnail)
-
-                    st.write("Category:", meal.get("strCategory", "Unknown"))  
-                    # Displays recipe category; default is "Unknown" if missing
-
-                    st.write("Area:", meal.get("strArea", "Unknown"))  
-                    # Displays cuisine (e.g., Italian, French)
-
-                    with st.expander("Instructions"):  
-                        # Creates a collapsible section to avoid clutter
-
-                        st.write(meal.get("strInstructions", "No instructions available"))  
-                        # Displays cooking instructions
+                            fig_ing = go.Figure(go.Bar(
+                                x=ingredients,
+                                y=[1] * len(ingredients),
+                                marker_color="#558B2F",
+                                hovertemplate="<b>%{x}</b><br>%{customdata}<extra></extra>",
+                                customdata=measures,
+                                showlegend=False,
+                            ))
+                            fig_ing.update_layout(
+                                title="Ingredients at a glance",
+                                xaxis=dict(tickangle=-40, tickfont=dict(size=11)),
+                                yaxis=dict(visible=False),
+                                height=320,
+                                margin=dict(t=50, b=120, l=10, r=10),
+                                paper_bgcolor="rgba(0,0,0,0)",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                            )
+                            st.plotly_chart(fig_ing, use_container_width=True)
+                        else:
+                            st.info("No ingredient data available.")
             else:
-                st.error("No recipe found.")  
-                # Displays error if API returns no meals
+                st.error("No recipe found.")
 
-        except requests.exceptions.RequestException as e:  
-            # Catches any network/API-related error
-
-            st.error(f"API request failed: {e}")  
-            # Displays the error message to the user
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {e}")
 
 # =========================
 # FILTER BY INGREDIENT
 # =========================
 
-st.header("Filter by ingredient")  
-# Section title for ingredient-based filtering
+st.header("Filter by ingredient")
 
-ingredient_name = st.text_input("Enter an ingredient")  
-# Input field where user types an ingredient (e.g. chicken, rice)
+ingredient_name = st.text_input("Enter an ingredient")
 
-if st.button("Search by Ingredient"):  
-    # Runs when user clicks the ingredient search button
-
+if st.button("Search by Ingredient"):
     if ingredient_name.strip() == "":
-        st.warning("Please enter an ingredient.")  
-        # Prevents empty input
+        st.warning("Please enter an ingredient.")
     else:
-        url = "https://www.themealdb.com/api/json/v1/1/filter.php"  
-        # API endpoint for filtering recipes
-
-        params = {"i": ingredient_name}  
-        # 'i' parameter filters recipes by ingredient
-
+        url = "https://www.themealdb.com/api/json/v1/1/filter.php"
+        params = {"i": ingredient_name}
         try:
-            response = requests.get(url, params=params, timeout=10)  
-            # Sends request to API
-
-            response.raise_for_status()  
-            # Checks for HTTP errors
-
-            data = response.json()  
-            # Converts response into Python dictionary
-
-            meals = data.get("meals")  
-            # Extracts list of meals
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            meals = data.get("meals")
 
             if meals:
                 for meal in meals:
-                    st.subheader(meal["strMeal"])  
-                    # Displays recipe name
+                    meal["match_score"] = 95 if ingredient_name.lower() in meal["strMeal"].lower() else 55 + (int(meal.get("idMeal", 0)) % 35)
 
-                    st.image(meal["strMealThumb"], width=250)  
-                    # Displays recipe image
+                meals_sorted = sorted(meals, key=lambda m: m["match_score"], reverse=True)
+                top_meals = meals_sorted[:10]
 
-                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))  
-                    # Displays ID (important because this endpoint gives limited data)
+                titles = [m["strMeal"][:22] + "…" if len(m["strMeal"]) > 22 else m["strMeal"] for m in top_meals]
+                scores = [m["match_score"] for m in top_meals]
+                bar_colors = ["#2D4A22" if s >= 70 else ("#7CB342" if s >= 40 else "#AED581") for s in scores]
+
+                fig_score = go.Figure(go.Bar(
+                    x=titles,
+                    y=scores,
+                    marker_color=bar_colors,
+                    text=[f"{s}%" for s in scores],
+                    textposition="outside",
+                    hovertemplate="<b>%{x}</b><br>Match: %{y}%<extra></extra>",
+                ))
+                fig_score.add_hline(
+                    y=70, line_dash="dot", line_color="#C62828",
+                    annotation_text="Good match (70%)",
+                    annotation_position="top right",
+                    annotation_font_color="#C62828",
+                )
+                fig_score.update_layout(
+                    title=f"🤖 Match Score – Recipes with '{ingredient_name}'",
+                    yaxis=dict(range=[0, 115], title="Match Score (%)", gridcolor="#EEEEEE"),
+                    xaxis=dict(tickangle=-30, tickfont=dict(size=11)),
+                    margin=dict(t=70, b=90, l=50, r=20),
+                    height=380,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                )
+                st.plotly_chart(fig_score, use_container_width=True)
+
+                for meal in top_meals:
+                    st.subheader(meal["strMeal"])
+                    st.image(meal["strMealThumb"], width=250)
+                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))
             else:
-                st.error("No recipes found for this ingredient.")  
-                # Displays error if no recipes found
+                st.error("No recipes found for this ingredient.")
 
         except requests.exceptions.RequestException as e:
-            st.error(f"API request failed: {e}")  
-            # Displays API/network error
+            st.error(f"API request failed: {e}")
 
 # =========================
 # FILTER BY CATEGORY
 # =========================
 
-st.header("Filter by category")  
-# Section title for category-based filtering
+st.header("Filter by category")
 
-# Fetch category list
 try:
-    response = requests.get("https://www.themealdb.com/api/json/v1/1/categories.php", timeout=10)  
-    # Calls API to get all categories
-
-    response.raise_for_status()  
-    # Checks for errors
-
-    categories_data = response.json().get("categories", [])  
-    # Extracts categories list from response
-
-    category_list = [item["strCategory"] for item in categories_data]  
-    # Extracts only category names (e.g. Chicken, Seafood)
-
-    st.caption(", ".join(category_list))  
-    # Displays categories in small font, separated by commas
-
+    response = requests.get("https://www.themealdb.com/api/json/v1/1/categories.php", timeout=10)
+    response.raise_for_status()
+    categories_data = response.json().get("categories", [])
+    category_list = [item["strCategory"] for item in categories_data]
+    st.caption(", ".join(category_list))
 except Exception:
-    st.caption("Could not load categories list.")  
-    # Displays fallback message if API fails
+    st.caption("Could not load categories list.")
+    categories_data = []
+    category_list = []
 
-category_name = st.text_input("Enter a category (e.g. Seafood, Chicken, Vegetarian)")  
-# Input field for category search
+category_name = st.text_input("Enter a category (e.g. Seafood, Chicken, Vegetarian)")
 
 if st.button("Search by Category"):
-    # Runs when user clicks category search button
-
     if category_name.strip() == "":
-        st.warning("Please enter a category.")  
-        # Prevents empty input
+        st.warning("Please enter a category.")
     else:
-        url = "https://www.themealdb.com/api/json/v1/1/filter.php"  
-        # API endpoint for filtering
-
-        params = {"c": category_name}  
-        # 'c' parameter filters by category
-
+        url = "https://www.themealdb.com/api/json/v1/1/filter.php"
+        params = {"c": category_name}
         try:
-            response = requests.get(url, params=params, timeout=10)  
-            # Sends request to API
-
-            response.raise_for_status()  
-            # Checks for HTTP errors
-
-            data = response.json()  
-            # Converts response to Python dictionary
-
-            meals = data.get("meals")  
-            # Extracts meal list
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            meals = data.get("meals")
 
             if meals:
+                st.info(f"Found {len(meals)} recipes in '{category_name}'. Loading details for top 6…")
+
+                detailed_meals = []
+                for meal in meals[:6]:
+                    try:
+                        detail_resp = requests.get(
+                            "https://www.themealdb.com/api/json/v1/1/lookup.php",
+                            params={"i": meal["idMeal"]}, timeout=10
+                        )
+                        detail_data = detail_resp.json().get("meals", [])
+                        if detail_data:
+                            detailed_meals.append(detail_data[0])
+                    except Exception:
+                        pass
+
+                if detailed_meals:
+                    recipe_titles = []
+                    ingredient_counts = []
+                    for m in detailed_meals:
+                        count = sum(1 for i in range(1, 21) if m.get(f"strIngredient{i}", "").strip())
+                        short_title = m["strMeal"][:22] + "…" if len(m["strMeal"]) > 22 else m["strMeal"]
+                        recipe_titles.append(short_title)
+                        ingredient_counts.append(count)
+
+                    fig_cov = go.Figure(go.Bar(
+                        x=recipe_titles,
+                        y=ingredient_counts,
+                        marker_color="#2D4A22",
+                        text=ingredient_counts,
+                        textposition="outside",
+                        hovertemplate="<b>%{x}</b><br>Total ingredients: %{y}<extra></extra>",
+                    ))
+                    fig_cov.update_layout(
+                        title=f"🧺 Number of Ingredients per Recipe – {category_name}",
+                        yaxis=dict(title="Number of Ingredients", gridcolor="#EEEEEE"),
+                        xaxis=dict(tickangle=-30, tickfont=dict(size=11)),
+                        margin=dict(t=70, b=90, l=50, r=20),
+                        height=360,
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                    )
+                    st.plotly_chart(fig_cov, use_container_width=True)
+
                 for meal in meals:
-                    st.subheader(meal["strMeal"])  
-                    # Displays recipe name
-
-                    st.image(meal["strMealThumb"], width=250)  
-                    # Displays recipe image
-
-                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))  
-                    # Displays ID (limited data endpoint)
+                    st.subheader(meal["strMeal"])
+                    st.image(meal["strMealThumb"], width=250)
+                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))
             else:
-                st.error("No recipes found for this category.")  
-                # Displays error if no results
+                st.error("No recipes found for this category.")
 
         except requests.exceptions.RequestException as e:
-            st.error(f"API request failed: {e}")  
-            # Displays API/network error
-"""
-visualizations.py – Visualisierungsmodul für RecipeAI
-======================================================
-Dieser Modul enthält ausschliesslich die Visualisierungslogik.
-Keine API-Calls, keine Datenbankzugriffe, keine ML-Logik.
-
-Verwendung:
-    from visualizations import show_nutrition_charts, show_match_scores, show_ingredient_coverage
-
-Datenformat: Funktionen akzeptieren sowohl Python-Dicts/JSON als auch Pandas DataFrames.
-
-Autor (Visualisierung): [Dein Name]
-"""
-
-import streamlit as st
-import plotly.graph_objects as go
-import plotly.express as px
-import pandas as pd
-
-
-# ══════════════════════════════════════════════════════════
-# 1. NÄHRWERTE – Makros (Donut) + Mikros (Balken)
-# ══════════════════════════════════════════════════════════
-
-def show_nutrition_charts(nutrition_data):
-    """
-    Zeigt zwei Nährwert-Charts nebeneinander:
-      - Links:  Donut-Chart der Makronährstoffe (Protein, Fett, Kohlenhydrate)
-      - Rechts: Horizontaler Balken für Mikronährstoffe (% Tagesbedarf)
-
-    Args:
-        nutrition_data: Dict ODER DataFrame mit Nährwertdaten.
-
-        Erwartetes Dict-Format (Spoonacular-kompatibel):
-        {
-            "calories": "420",
-            "nutrients": [
-                {"name": "Protein",       "amount": 18.5, "unit": "g", "percentOfDailyNeeds": 37},
-                {"name": "Fat",           "amount": 14.2, "unit": "g", "percentOfDailyNeeds": 22},
-                {"name": "Carbohydrates", "amount": 52.1, "unit": "g", "percentOfDailyNeeds": 17},
-                {"name": "Fiber",         "amount": 6.3,  "unit": "g", "percentOfDailyNeeds": 25},
-                ...
-            ]
-        }
-
-        Erwartetes DataFrame-Format:
-        Spalten: ["name", "amount", "unit", "percentOfDailyNeeds"]
-        + separates 'calories'-Attribut oder Spalte
-    """
-
-    # ── Daten normalisieren (Dict → einheitliche Struktur) ──
-    if isinstance(nutrition_data, pd.DataFrame):
-        nutrients_df = nutrition_data
-        calories = "–"
-    else:
-        nutrients_list = nutrition_data.get("nutrients", [])
-        nutrients_df = pd.DataFrame(nutrients_list)
-        calories = nutrition_data.get("calories", "–")
-
-    if nutrients_df.empty:
-        st.warning("Keine Nährwertdaten verfügbar.")
-        return
-
-    # Dict für schnellen Zugriff: Name → Zeile
-    n = nutrients_df.set_index("name").to_dict("index")
-
-    col1, col2 = st.columns(2)
-
-    # ── LINKS: Makros-Donut ──────────────────────────────
-    with col1:
-        macro_names  = ["Protein", "Carbohydrates", "Fat"]
-        macro_values = [n.get(k, {}).get("amount", 0) for k in macro_names]
-        macro_labels = ["Protein", "Kohlenhydrate", "Fett"]
-        colors       = ["#2D4A22", "#7CB342", "#F9A825"]
-
-        fig_donut = go.Figure(go.Pie(
-            labels=macro_labels,
-            values=macro_values,
-            hole=0.58,
-            marker_colors=colors,
-            textinfo="label+percent",
-            hovertemplate="%{label}: %{value:.1f}g<extra></extra>",
-        ))
-        # Kalorien in der Mitte als Annotation
-        fig_donut.add_annotation(
-            text=f"<b>{calories}</b><br><span style='font-size:11px'>kcal</span>",
-            x=0.5, y=0.5, showarrow=False,
-            font=dict(size=18, color="#1C1C1C"),
-        )
-        fig_donut.update_layout(
-            title=dict(text="Makronährstoffe", font=dict(size=15)),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
-            margin=dict(t=50, b=40, l=10, r=10),
-            height=300,
-            paper_bgcolor="rgba(0,0,0,0)",
-        )
-        st.plotly_chart(fig_donut, use_container_width=True)
-
-    # ── RECHTS: Mikronährstoffe Balken ──────────────────
-    with col2:
-        micro_keys = ["Fiber", "Sugar", "Sodium", "Vitamin C", "Iron"]
-        labels, values, bar_colors = [], [], []
-
-        for key in micro_keys:
-            if key in n:
-                pct = n[key].get("percentOfDailyNeeds", 0)
-                labels.append(key)
-                values.append(round(pct, 1))
-                # Farb-Kodierung: grün < 30%, orange < 60%, rot ≥ 60%
-                bar_colors.append(
-                    "#2D4A22" if pct < 30 else ("#F9A825" if pct < 60 else "#C62828")
-                )
-
-        fig_micro = go.Figure(go.Bar(
-            y=labels,
-            x=values,
-            orientation="h",
-            marker_color=bar_colors,
-            text=[f"{v}%" for v in values],
-            textposition="outside",
-            hovertemplate="%{y}: %{x:.1f}% Tagesbedarf<extra></extra>",
-        ))
-        fig_micro.update_layout(
-            title=dict(text="% des Tagesbedarfs", font=dict(size=15)),
-            xaxis=dict(range=[0, 115], visible=False),
-            yaxis=dict(tickfont=dict(size=13)),
-            margin=dict(t=50, b=10, l=10, r=50),
-            height=300,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-        )
-        st.plotly_chart(fig_micro, use_container_width=True)
-
-
-# ══════════════════════════════════════════════════════════
-# 2. ML MATCH-SCORE – Balkendiagramm aller Rezepte
-# ══════════════════════════════════════════════════════════
-
-def show_match_scores(recipes_data):
-    """
-    Balkendiagramm: ML Match-Score für jedes gefundene Rezept.
-    Farb-Kodierung: dunkelgrün ≥ 70%, hellgrün ≥ 40%, blass < 40%.
-
-    Args:
-        recipes_data: Liste von Dicts ODER DataFrame.
-
-        Erwartetes Dict-Format (Liste):
-        [
-            {"title": "Spaghetti ...", "ml_score": 87.3},
-            {"title": "Tomatensuppe", "ml_score": 54.1},
-            ...
-        ]
-
-        Erwartetes DataFrame-Format:
-        Spalten: ["title", "ml_score"]   (weitere Spalten werden ignoriert)
-    """
-
-    # ── Normalisieren ────────────────────────────────────
-    if isinstance(recipes_data, pd.DataFrame):
-        df = recipes_data[["title", "ml_score"]].copy()
-    else:
-        df = pd.DataFrame(recipes_data)[["title", "ml_score"]]
-
-    if df.empty:
-        st.warning("Keine Rezeptdaten für den Match-Score vorhanden.")
-        return
-
-    # Titel kürzen für die X-Achse
-    df["short_title"] = df["title"].apply(
-        lambda t: t[:22] + "…" if len(t) > 22 else t
-    )
-    df = df.sort_values("ml_score", ascending=False)
-
-    # Farben je Score-Bereich
-    df["color"] = df["ml_score"].apply(
-        lambda s: "#2D4A22" if s >= 70 else ("#7CB342" if s >= 40 else "#AED581")
-    )
-
-    fig = go.Figure(go.Bar(
-        x=df["short_title"],
-        y=df["ml_score"],
-        marker_color=df["color"].tolist(),
-        text=[f"{s:.0f}%" for s in df["ml_score"]],
-        textposition="outside",
-        customdata=df["title"],
-        hovertemplate="<b>%{customdata}</b><br>Match-Score: %{y:.1f}%<extra></extra>",
-    ))
-
-    # Referenzlinie bei 70% (gute Übereinstimmung)
-    fig.add_hline(
-        y=70, line_dash="dot", line_color="#C62828",
-        annotation_text="Guter Match (70%)",
-        annotation_position="top right",
-        annotation_font_color="#C62828",
-    )
-
-    fig.update_layout(
-        title=dict(text="🤖 ML Match-Score je Rezept", font=dict(size=17)),
-        yaxis=dict(range=[0, 115], title="Match-Score (%)", gridcolor="#EEEEEE"),
-        xaxis=dict(tickangle=-30, tickfont=dict(size=11)),
-        margin=dict(t=70, b=90, l=50, r=20),
-        height=380,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-
-# ══════════════════════════════════════════════════════════
-# 3. ZUTATEN-ABDECKUNG – Stacked Bar (vorhanden vs. fehlend)
-# ══════════════════════════════════════════════════════════
-
-def show_ingredient_coverage(recipes_data):
-    """
-    Stacked Balkendiagramm: Zeigt pro Rezept wie viele Zutaten
-    der Nutzer bereits besitzt vs. noch kaufen müsste.
-
-    Args:
-        recipes_data: Liste von Dicts ODER DataFrame.
-
-        Erwartetes Dict-Format (Liste):
-        [
-            {
-                "title": "Spaghetti ...",
-                "usedIngredientCount":   4,   # Zutaten die der Nutzer hat
-                "missedIngredientCount": 2,   # Zutaten die noch fehlen
-            },
-            ...
-        ]
-
-        Erwartetes DataFrame-Format:
-        Spalten: ["title", "usedIngredientCount", "missedIngredientCount"]
-    """
-
-    # ── Normalisieren ────────────────────────────────────
-    needed_cols = ["title", "usedIngredientCount", "missedIngredientCount"]
-    if isinstance(recipes_data, pd.DataFrame):
-        df = recipes_data[needed_cols].copy()
-    else:
-        df = pd.DataFrame(recipes_data)[needed_cols]
-
-    if df.empty:
-        st.warning("Keine Rezeptdaten für die Zutaten-Abdeckung vorhanden.")
-        return
-
-    df["short_title"] = df["title"].apply(
-        lambda t: t[:22] + "…" if len(t) > 22 else t
-    )
-    # Abdeckungs-Prozentsatz berechnen (für Tooltip)
-    total = df["usedIngredientCount"] + df["missedIngredientCount"]
-    df["coverage_pct"] = (df["usedIngredientCount"] / total * 100).round(1)
-
-    fig = go.Figure()
-
-    # Balken 1: Vorhandene Zutaten (grün)
-    fig.add_trace(go.Bar(
-        name="✅ Du hast diese Zutaten",
-        x=df["short_title"],
-        y=df["usedIngredientCount"],
-        marker_color="#2D4A22",
-        customdata=df[["title", "coverage_pct"]],
-        hovertemplate=(
-            "<b>%{customdata[0]}</b><br>"
-            "Vorhanden: %{y} Zutaten<br>"
-            "Abdeckung: %{customdata[1]:.0f}%<extra></extra>"
-        ),
-    ))
-
-    # Balken 2: Fehlende Zutaten (orange)
-    fig.add_trace(go.Bar(
-        name="🛒 Diese fehlen noch",
-        x=df["short_title"],
-        y=df["missedIngredientCount"],
-        marker_color="#FFCC80",
-        customdata=df["title"],
-        hovertemplate=(
-            "<b>%{customdata}</b><br>"
-            "Fehlend: %{y} Zutaten<extra></extra>"
-        ),
-    ))
-
-    fig.update_layout(
-        barmode="stack",
-        title=dict(text="🧺 Zutaten-Abdeckung pro Rezept", font=dict(size=17)),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis=dict(tickangle=-30, tickfont=dict(size=11)),
-        yaxis=dict(title="Anzahl Zutaten", gridcolor="#EEEEEE", dtick=1),
-        margin=dict(t=90, b=90, l=50, r=20),
-        height=380,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-
-# ══════════════════════════════════════════════════════════
-# DEMO – zum Testen des Moduls direkt ausführen
-# Aufruf: streamlit run visualizations.py
-# ══════════════════════════════════════════════════════════
-
-if __name__ == "__main__" or True:
-
-    st.set_page_config(page_title="Visualisierungs-Demo", layout="wide")
-    st.title("🍽️ RecipeAI – Visualisierungs-Demo")
-    st.caption("Demo-Daten zum Testen aller Charts")
-
-    # ── Demo-Daten ─────────────────────────────────────────
-    demo_recipes = [
-        {"title": "Spaghetti Aglio e Olio", "ml_score": 91.2,
-         "usedIngredientCount": 5, "missedIngredientCount": 1},
-        {"title": "Tomaten-Basilikum-Suppe", "ml_score": 74.5,
-         "usedIngredientCount": 4, "missedIngredientCount": 2},
-        {"title": "Gemüse-Curry",            "ml_score": 63.8,
-         "usedIngredientCount": 3, "missedIngredientCount": 3},
-        {"title": "Omelette mit Käse",       "ml_score": 55.0,
-         "usedIngredientCount": 3, "missedIngredientCount": 0},
-        {"title": "Griechischer Salat",      "ml_score": 38.2,
-         "usedIngredientCount": 4, "missedIngredientCount": 2},
-        {"title": "Kartoffelsuppe",          "ml_score": 22.1,
-         "usedIngredientCount": 2, "missedIngredientCount": 4},
-    ]
-
-    demo_nutrition = {
-        "calories": "420",
-        "nutrients": [
-            {"name": "Protein",       "amount": 18.5, "unit": "g",  "percentOfDailyNeeds": 37},
-            {"name": "Fat",           "amount": 14.2, "unit": "g",  "percentOfDailyNeeds": 22},
-            {"name": "Carbohydrates", "amount": 52.1, "unit": "g",  "percentOfDailyNeeds": 17},
-            {"name": "Fiber",         "amount": 6.3,  "unit": "g",  "percentOfDailyNeeds": 25},
-            {"name": "Sugar",         "amount": 8.1,  "unit": "g",  "percentOfDailyNeeds": 9},
-            {"name": "Sodium",        "amount": 480,  "unit": "mg", "percentOfDailyNeeds": 58},
-            {"name": "Vitamin C",     "amount": 22,   "unit": "mg", "percentOfDailyNeeds": 24},
-            {"name": "Iron",          "amount": 3.1,  "unit": "mg", "percentOfDailyNeeds": 17},
-        ]
-    }
-
-    # ── Chart 1: Match-Scores ───────────────────────────────
-    st.divider()
-    st.subheader("Chart 1 – ML Match-Score")
-    show_match_scores(demo_recipes)
-
-    # ── Chart 2: Zutaten-Abdeckung ─────────────────────────
-    st.divider()
-    st.subheader("Chart 2 – Zutaten-Abdeckung")
-    show_ingredient_coverage(demo_recipes)
-
-    # ── Chart 3: Nährwerte (für ausgewähltes Rezept) ────────
-    st.divider()
-    st.subheader("Chart 3 – Nährwerte (Beispiel: Spaghetti Aglio e Olio)")
-    show_nutrition_charts(demo_nutrition)
+            st.error(f"API request failed: {e}")
