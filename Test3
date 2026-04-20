@@ -1,0 +1,214 @@
+# Simple Search engine for "Recipes name", "Search by ingredient" and "Search by category" 
+# Only one ingredient can be sorted at a time 
+# Only using ThemealDB as it's the most straighforward API" 
+
+import streamlit as st
+import requests
+
+# =========================
+# BASIC SETUP
+# =========================
+
+st.title("Recipe Finder")  
+# Displays the main title at the top of the Streamlit app
+
+# =========================
+# SEARCH BY NAME
+# =========================
+
+st.header("Search by meal name")  
+# Creates a section title for searching recipes by name
+
+recipe_name = st.text_input("Enter a recipe name")  
+# Creates an input field where the user types a recipe name
+# The value entered is stored in the variable 'recipe_name'
+
+if st.button("Search by Name"):  
+    # Creates a button; the code inside runs only when the button is clicked
+
+    if recipe_name.strip() == "":  
+        # strip() removes spaces to avoid empty inputs like "   "
+        st.warning("Please enter a recipe name.")  
+        # Displays a warning message if input is empty
+    else:
+        url = "https://www.themealdb.com/api/json/v1/1/search.php"  
+        # API endpoint for searching recipes by name
+
+        params = {"s": recipe_name}  
+        # Query parameter 's' is required by TheMealDB to search by name
+
+        try:
+            response = requests.get(url, params=params, timeout=10)  
+            # Sends an HTTP GET request to the API with parameters
+            # timeout prevents the app from freezing if API is slow
+
+            response.raise_for_status()  
+            # Raises an error if HTTP response is not successful (e.g. 404, 500)
+
+            data = response.json()  
+            # Converts the API response (JSON) into a Python dictionary
+
+            meals = data.get("meals")  
+            # Extracts the list of meals; can be None if no result
+
+            if meals:  
+                # Checks if at least one recipe was found
+
+                for meal in meals:  
+                    # Loops through each recipe in the result list
+
+                    st.subheader(meal["strMeal"])  
+                    # Displays the recipe name
+
+                    st.image(meal["strMealThumb"], width=300)  
+                    # Displays the recipe image (thumbnail)
+
+                    st.write("Category:", meal.get("strCategory", "Unknown"))  
+                    # Displays recipe category; default is "Unknown" if missing
+
+                    st.write("Area:", meal.get("strArea", "Unknown"))  
+                    # Displays cuisine (e.g., Italian, French)
+
+                    with st.expander("Instructions"):  
+                        # Creates a collapsible section to avoid clutter
+
+                        st.write(meal.get("strInstructions", "No instructions available"))  
+                        # Displays cooking instructions
+            else:
+                st.error("No recipe found.")  
+                # Displays error if API returns no meals
+
+        except requests.exceptions.RequestException as e:  
+            # Catches any network/API-related error
+
+            st.error(f"API request failed: {e}")  
+            # Displays the error message to the user
+
+# =========================
+# FILTER BY INGREDIENT
+# =========================
+
+st.header("Filter by ingredient")  
+# Section title for ingredient-based filtering
+
+ingredient_name = st.text_input("Enter an ingredient")  
+# Input field where user types an ingredient (e.g. chicken, rice)
+
+if st.button("Search by Ingredient"):  
+    # Runs when user clicks the ingredient search button
+
+    if ingredient_name.strip() == "":
+        st.warning("Please enter an ingredient.")  
+        # Prevents empty input
+    else:
+        url = "https://www.themealdb.com/api/json/v1/1/filter.php"  
+        # API endpoint for filtering recipes
+
+        params = {"i": ingredient_name}  
+        # 'i' parameter filters recipes by ingredient
+
+        try:
+            response = requests.get(url, params=params, timeout=10)  
+            # Sends request to API
+
+            response.raise_for_status()  
+            # Checks for HTTP errors
+
+            data = response.json()  
+            # Converts response into Python dictionary
+
+            meals = data.get("meals")  
+            # Extracts list of meals
+
+            if meals:
+                for meal in meals:
+                    st.subheader(meal["strMeal"])  
+                    # Displays recipe name
+
+                    st.image(meal["strMealThumb"], width=250)  
+                    # Displays recipe image
+
+                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))  
+                    # Displays ID (important because this endpoint gives limited data)
+            else:
+                st.error("No recipes found for this ingredient.")  
+                # Displays error if no recipes found
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {e}")  
+            # Displays API/network error
+
+# =========================
+# FILTER BY CATEGORY
+# =========================
+
+st.header("Filter by category")  
+# Section title for category-based filtering
+
+# Fetch category list
+try:
+    response = requests.get("https://www.themealdb.com/api/json/v1/1/categories.php", timeout=10)  
+    # Calls API to get all categories
+
+    response.raise_for_status()  
+    # Checks for errors
+
+    categories_data = response.json().get("categories", [])  
+    # Extracts categories list from response
+
+    category_list = [item["strCategory"] for item in categories_data]  
+    # Extracts only category names (e.g. Chicken, Seafood)
+
+    st.caption(", ".join(category_list))  
+    # Displays categories in small font, separated by commas
+
+except Exception:
+    st.caption("Could not load categories list.")  
+    # Displays fallback message if API fails
+
+category_name = st.text_input("Enter a category (e.g. Seafood, Chicken, Vegetarian)")  
+# Input field for category search
+
+if st.button("Search by Category"):
+    # Runs when user clicks category search button
+
+    if category_name.strip() == "":
+        st.warning("Please enter a category.")  
+        # Prevents empty input
+    else:
+        url = "https://www.themealdb.com/api/json/v1/1/filter.php"  
+        # API endpoint for filtering
+
+        params = {"c": category_name}  
+        # 'c' parameter filters by category
+
+        try:
+            response = requests.get(url, params=params, timeout=10)  
+            # Sends request to API
+
+            response.raise_for_status()  
+            # Checks for HTTP errors
+
+            data = response.json()  
+            # Converts response to Python dictionary
+
+            meals = data.get("meals")  
+            # Extracts meal list
+
+            if meals:
+                for meal in meals:
+                    st.subheader(meal["strMeal"])  
+                    # Displays recipe name
+
+                    st.image(meal["strMealThumb"], width=250)  
+                    # Displays recipe image
+
+                    st.write("Meal ID:", meal.get("idMeal", "Unknown"))  
+                    # Displays ID (limited data endpoint)
+            else:
+                st.error("No recipes found for this category.")  
+                # Displays error if no results
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {e}")  
+            # Displays API/network error
